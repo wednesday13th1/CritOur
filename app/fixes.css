@@ -1,0 +1,2 @@
+.drawer{position:relative;z-index:1}
+.project-card:focus-visible,.news-card:focus-visible{outline:2px solid var(--rose);outline-offset:6px}

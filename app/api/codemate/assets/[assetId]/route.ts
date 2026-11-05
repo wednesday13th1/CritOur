@@ -1,0 +1,5 @@
+import {env} from 'cloudflare:workers';
+import {codemateActor,codemateProject} from '@/lib/codemate-access';
+import {RequestError} from '@/lib/request-security';
+import {studioError} from '@/lib/studio-response';
+export async function GET(_:Request,{params}:{params:Promise<{assetId:string}>}){try{const user=await codemateActor(),id=(await params).assetId,asset=await env.DB!.prepare('SELECT * FROM cm_assets WHERE id=?').bind(id).first<any>();if(!asset)throw new RequestError('画像が見つかりません。',404);await codemateProject(user,asset.project_id);const published=await env.DB!.prepare('SELECT 1 FROM cm_builds WHERE after_asset_id=? AND project_id=?').bind(id,asset.project_id).first();if(!published&&asset.uploaded_by!==user.accountId)throw new RequestError('画像が見つかりません。',404);const object=await env.BUCKET?.get(asset.storage_key);if(!object)throw new RequestError('画像が見つかりません。',404);return new Response(object.body,{headers:{'Content-Type':asset.mime,'Cache-Control':'private, no-store','Content-Security-Policy':"default-src 'none'; sandbox",'X-Content-Type-Options':'nosniff'}})}catch(e){return studioError(e)}}

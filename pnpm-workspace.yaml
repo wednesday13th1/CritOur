@@ -1,0 +1,14 @@
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+  workerd: true
+
+overrides:
+  fast-uri: 3.1.9
+  undici: 7.30.1
+  ws: 8.21.0
+  sharp: 0.35.5
+  image-size: 2.0.3
+  esbuild: 0.28.2
+  "satori>fflate": 0.7.5

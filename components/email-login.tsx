@@ -1,0 +1,7 @@
+'use client';
+export function EmailLogin({ready=false,error=''}:{ready?:boolean;error?:string}){
+ return <main className="login workspace-login"><div><span className="eyebrow">motto. / TEAM WORKSPACE</span><h1>Welcome to<br/>our studio ♡</h1><p>いつものGmailで、チームの場所へ。</p><form action="/api/auth/google/start" method="post" target="_top" className="passcode-form email-login"><label htmlFor="email">Gmailアドレス</label><input id="email" name="email" type="email" required maxLength={254} pattern="[^@\s]+@gmail\.com" placeholder="yourname@gmail.com" autoComplete="email" autoCapitalize="off" spellCheck={false}/><button className="primary google-button" disabled={!ready}>Googleで続ける</button><small>登録済みのGmailをGoogleで確認すると、そのままAdminに入れます。</small>{!ready&&<p className="notice" role="status">Googleログインは接続設定中です。設定完了後に利用できます。</p>}{error&&<p className="form-error" role="alert">{error}</p>}</form><a className="public-return" href="/">View public website ↗</a></div></main>;
+}
+export function Reauthenticate({email}:{email:string}){
+ return <section className="reauthenticate"><h3>Confirm it’s you ♡</h3><p>登録メンバーの変更前に、Googleで本人確認をやり直してください。有効時間は5分間です。</p><form action="/api/auth/google/start" method="post" target="_top" className="passcode-form"><input type="hidden" name="email" value={email}/><input type="hidden" name="reauthenticate" value="true"/><p>{email}</p><button className="primary google-button">Googleで再認証</button></form></section>;
+}

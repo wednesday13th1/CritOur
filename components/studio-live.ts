@@ -1,0 +1,9 @@
+'use client';
+import {useEffect,useRef} from 'react';
+import {requestMessage} from '@/lib/request-feedback';
+import {requestGate} from '@/lib/conversation-state';
+export function useRequestGate(scope:string){const state=useRef({scope,gate:requestGate()});if(state.current.scope!==scope){state.current.gate.invalidate();state.current.scope=scope}const gate=state.current.gate;useEffect(()=>()=>gate.invalidate(),[gate]);return gate;}
+export function studioChanged(projectId:string){window.dispatchEvent(new CustomEvent('studio:refresh',{detail:projectId}))}
+export function useStudioRefresh(projectId:string,refresh:()=>Promise<void>){useEffect(()=>{let active=true,running=false,queued=false;const run=async()=>{if(!active)return;if(running){queued=true;return}running=true;do{queued=false;try{await refresh()}catch{}}while(active&&queued);running=false};const listener=(e:Event)=>{if((e as CustomEvent).detail===projectId)void run()};window.addEventListener('studio:refresh',listener);return()=>{active=false;window.removeEventListener('studio:refresh',listener)}},[projectId,refresh])}
+export async function studioAction(projectId:string,body:any){try{const r=await fetch('/api/studio/collaboration',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId,...body})});const j=await r.json();if(!r.ok)throw Object.assign(Error(j.error),{status:r.status});studioChanged(projectId);return j;}catch(e){if(e instanceof Error)e.message=requestMessage(e);throw e;}}
+export async function studioRead(projectId:string,view:string,args:Record<string,string>={}){try{const q=new URLSearchParams({projectId,view,...args});const r=await fetch('/api/studio/collaboration?'+q,{cache:'no-store'});const j=await r.json();if(!r.ok)throw Object.assign(Error(j.error||'読み込めませんでした。再試行してください。'),{status:r.status});return j;}catch(e){if(e instanceof Error)e.message=requestMessage(e);throw e;}}
