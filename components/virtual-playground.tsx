@@ -13,6 +13,8 @@ type Build = {
   commit_url?: string;
 };
 
+const deviceNames = {Desktop:"パソコン",Tablet:"タブレット",Mobile:"スマートフォン"};
+const platformNames = {web:"Webアプリ",ios:"iOSアプリ",game:"ゲーム"};
 const widths = { Desktop: "100%", Tablet: "768px", Mobile: "390px" };
 
 export function VirtualPlayground({ build, screenshot }: { build: Build; screenshot?: string }) {
@@ -26,13 +28,13 @@ export function VirtualPlayground({ build, screenshot }: { build: Build; screens
   return (
     <section className="cm-preview cm-virtual">
       <header>
-        <div><strong>Virtual Playground</strong><br />{build.title} · {build.version_label} · {platform.toUpperCase()}</div>
+        <div><strong>作品プレビュー</strong><br />{build.title} · {build.version_label} · {platformNames[platform]}</div>
         {build.commit_url && <a href={build.commit_url} target="_blank" rel="noreferrer">対応するGitHubの変更</a>}
       </header>
       {build.preview_url ? <>
         <div className="cm-buttons cm-virtual-tools" role="group" aria-label="プレビュー操作">
           {(Object.keys(widths) as (keyof typeof widths)[]).map(mode => (
-            <button key={mode} aria-pressed={size === mode} onClick={() => setSize(mode)}>{mode}</button>
+            <button key={mode} aria-pressed={size === mode} onClick={() => setSize(mode)}>{deviceNames[mode]}</button>
           ))}
           {opened && <button onClick={() => setRevision(value => value + 1)}>{game ? "最初から遊ぶ" : "再読み込み"}</button>}
           {opened && <button onClick={async () => {
@@ -60,7 +62,7 @@ export function VirtualPlayground({ build, screenshot }: { build: Build; screens
       </> : <>
         <div className="cm-preview-start">
           <h3>{build.device || "iPhone"}の実行記録</h3>
-          <p>Simulator connection required — リモートSimulatorの操作はComing Soon。</p>
+          <p>シミュレーター操作は準備中です。</p>
           {screenshot && <img src={screenshot} alt={build.title + "のスクリーンショット"} />}
           {build.recording_url && <video controls preload="none" src={build.recording_url} aria-label={build.title + "の画面録画"} />}
           {screenshot && <a href={screenshot} download>共有画像を保存</a>}

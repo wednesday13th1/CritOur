@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { existsSync, accessSync, constants } from "node:fs";
 import path from "node:path";
 import { projectRoot } from "./sites-env.mjs";
 import { readExecutionProfile } from "./execution-profile.mjs";
@@ -27,10 +27,16 @@ if (readExecutionProfile() === "managed-linux") {
 }
 
 // Invoke npm's JavaScript entrypoint, avoiding platform-specific shell shims.
+const usesPnpm = existsSync(path.join(projectRoot,"pnpm-lock.yaml"));
+const installerCli = usesPnpm && !process.env.npm_execpath.includes("pnpm")
+  ? path.resolve(path.dirname(process.execPath),"../lib/node_modules/corepack/dist/pnpm.js")
+  : process.env.npm_execpath;
+if (!existsSync(installerCli)) throw new Error("Use corepack pnpm install --frozen-lockfile with this repository's pnpm lockfile.");
 const installed = await runNpmInstall([
-  process.execPath,
-    process.env.npm_execpath, "ci", "--prefix", projectRoot, "--workspaces=false",
-    "--include=dev", "--include=optional", "--prefer-offline", "--no-audit", "--no-fund",
+  process.execPath, installerCli,
+  ...(usesPnpm
+    ? ["install", "--frozen-lockfile", "--prefer-offline"]
+    : ["ci", "--prefix", projectRoot, "--workspaces=false", "--include=dev", "--include=optional", "--prefer-offline", "--no-audit", "--no-fund"]),
 ]);
 if (installed.signal) process.kill(process.pid, installed.signal);
 if (installed.code !== 0 || installed.signal) process.exit(installed.code || 1);

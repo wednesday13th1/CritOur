@@ -16,7 +16,7 @@ export async function cmRead(user:StudioActor,q:URLSearchParams){
  if(!projectId)return {user:{accountId:user.accountId,displayName:user.displayName,isManager:user.isStudioAdmin},projects};
  const project=await codemateProject(user,projectId),people=await codematePeople(projectId);
  const [builds,tasks,feedbacks,replies,journeys,retests,events,visit,counts,channel,canvas]=await Promise.all([
- db().prepare('SELECT b.*,d.platform,d.device,d.recording_url,a.display_name AS author_name FROM cm_builds b LEFT JOIN cm_preview_details d ON d.build_id=b.id JOIN member_accounts a ON a.id=b.created_by WHERE b.project_id=? ORDER BY b.seq DESC LIMIT 100').bind(projectId).all(),
+ db().prepare("SELECT b.*,d.platform,d.device,d.recording_url,a.display_name AS author_name FROM cm_builds b LEFT JOIN cm_preview_details d ON d.build_id=b.id JOIN member_accounts a ON a.id=b.created_by WHERE b.project_id=? AND b.id!=('showcase-'||b.project_id) ORDER BY b.seq DESC LIMIT 100").bind(projectId).all(),
  db().prepare('SELECT * FROM studio_tasks WHERE project_id=? ORDER BY status=\'done\',due_date IS NULL,due_date,updated_at DESC LIMIT 200').bind(projectId).all<any>(),
  db().prepare('SELECT f.*,a.display_name AS author_name FROM cm_feedback f JOIN member_accounts a ON a.id=f.author_id WHERE f.project_id=? ORDER BY f.created_at DESC,f.id DESC LIMIT 500').bind(projectId).all(),
  db().prepare('SELECT r.*,a.display_name AS author_name FROM cm_replies r JOIN cm_feedback f ON f.id=r.feedback_id JOIN member_accounts a ON a.id=r.author_id WHERE f.project_id=? ORDER BY r.created_at DESC,r.id DESC LIMIT 500').bind(projectId).all(),
@@ -52,7 +52,7 @@ export async function cmAction(user:StudioActor,b:Record<string,any>,origin:stri
  ]);if(!consumed[0].meta.changes)throw new RequestError('この招待は使用済みです。',409);return {ok:true,projectId:invite.project_id};
  }
  if(action==='project.create'){
- if(!user.isStudioAdmin)throw new RequestError('既存のWorkspace管理者が作成できます。',403);
+
  const name=shortText(b.name,100),description=shortText(b.description||'',4000,false),kind=b.kind;if(!['web','ios'].includes(kind))throw new RequestError('WebまたはiOSを選んでください。');
  const id=crypto.randomUUID(),at=now();await db().batch([db().prepare('INSERT INTO studio_projects(id,name,description,created_by,created_at,updated_at)VALUES(?,?,?,?,?,?)').bind(id,name,description,user.accountId,at,at),db().prepare('INSERT INTO cm_project_settings(project_id,kind)VALUES(?,?)').bind(id,kind),db().prepare('INSERT INTO studio_project_members(project_id,account_id,added_by,joined_at)VALUES(?,?,?,?)').bind(id,user.accountId,user.accountId,at),db().prepare("INSERT INTO studio_channels(id,project_id,name,created_by,created_at)VALUES(?,?,'general',?,?)").bind(crypto.randomUUID(),id,user.accountId,at),cmEvent(id,user,'project.created',id)]);return {ok:true,id};
  }
@@ -102,8 +102,8 @@ export async function cmAction(user:StudioActor,b:Record<string,any>,origin:stri
    }
    return {ok:true};
  }
- if(action==='task.create'||action==='task.update'){if(b.status!==undefined&&!['todo','in_progress','done'].includes(b.status))throw new RequestError('To Do・Doing・Doneから選んでください。');const result=await studioTaskAction(user,{...b,action,projectId});await cmEvent(projectId,user,b.status==='done'?'task.done':'task.updated',result.id).run();return result;}
- if(action==='project.goal'){await db().prepare("INSERT INTO cm_project_settings(project_id,kind,next_goal)VALUES(?,'web',?) ON CONFLICT(project_id) DO UPDATE SET next_goal=excluded.next_goal").bind(projectId,shortText(b.goal,300,false)).run();return {ok:true};}
+ if(action==='task.create'||action==='task.update'){if(b.status!==undefined&&!['todo','in_progress','done'].includes(b.status))throw new RequestError('タスクの状態を「未着手」「取り組み中」「完了」から選んでください。');const result=await studioTaskAction(user,{...b,action,projectId});await cmEvent(projectId,user,b.status==='done'?'task.done':'task.updated',result.id).run();return result;}
+ if(action==='project.goal'){if(p.created_by!==user.accountId)throw new RequestError("目標を編集できるのはプロジェクトの管理者だけです。",403);await db().prepare("INSERT INTO cm_project_settings(project_id,kind,next_goal)VALUES(?,'web',?) ON CONFLICT(project_id) DO UPDATE SET next_goal=excluded.next_goal").bind(projectId,shortText(b.goal,300,false)).run();return {ok:true};}
  if(['member.remove','invite.create','invite.revoke'].includes(action)&&!recentlyVerified(user))throw new RequestError('参加権限の操作は、再ログインから5分以内に行ってください。',403);
  if(action==='member.remove'){
  if(!user.isStudioAdmin&&p.created_by!==user.accountId)throw new RequestError('プロジェクト作成者が参加を解除できます。',403);
@@ -129,10 +129,18 @@ export async function cmAction(user:StudioActor,b:Record<string,any>,origin:stri
  if(asset&&!await db().prepare('SELECT 1 FROM cm_assets WHERE id=? AND project_id=? AND uploaded_by=?').bind(asset,projectId,user.accountId).first())throw new RequestError('アップロードした画像を選んでください。');
  if(kind==='ios'&&!asset&&!recording)throw new RequestError('スクリーンショットまたは録画URLを登録してください。');
  const old=await db().prepare('SELECT b.*,d.platform,d.device,d.recording_url FROM cm_builds b LEFT JOIN cm_preview_details d ON d.build_id=b.id WHERE b.created_by=? AND b.client_id=?').bind(user.accountId,key).first<any>();if(old){if((old.platform||old.kind)!==platform||old.device!==device||old.recording_url!==recording||old.project_id!==projectId||old.version_label!==label||old.title!==title||old.preview_url!==url||old.commit_url!==commit||old.after_asset_id!==asset||old.summary!==summary||old.task_id!==task||old.previous_id!==(previous?.id||null))throw new RequestError('送信IDを確認してください。',409);return {ok:true,id:old.id};}
- const id=crypto.randomUUID(),at=now();await db().batch([db().prepare('INSERT INTO cm_builds(id,project_id,task_id,title,version_label,summary,kind,preview_url,commit_url,previous_id,after_asset_id,created_by,client_id,created_at)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(created_by,client_id) DO NOTHING').bind(id,projectId,task,title,label,summary,kind,url,commit,previous?.id||null,asset,user.accountId,key,at),db().prepare('INSERT INTO cm_preview_details(build_id,platform,device,recording_url) SELECT id,?,?,? FROM cm_builds WHERE id=?').bind(platform,device,recording,id),db().prepare("INSERT INTO cm_events(project_id,actor_id,kind,target_id,build_id,created_at) SELECT ?,?,'build.shared',?,?,? WHERE EXISTS(SELECT 1 FROM cm_builds WHERE id=?)").bind(projectId,user.accountId,id,id,at,id)]);
+ const id=crypto.randomUUID(),at=now();await db().batch([db().prepare('INSERT INTO cm_builds(id,project_id,task_id,title,version_label,summary,kind,preview_url,commit_url,previous_id,after_asset_id,created_by,client_id,created_at)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(created_by,client_id) DO NOTHING').bind(id,projectId,task,title,label,summary,kind,url,commit,previous?.id||null,asset,user.accountId,key,at),db().prepare('INSERT INTO cm_preview_details(build_id,platform,device,recording_url) SELECT id,?,?,? FROM cm_builds WHERE id=?').bind(platform,device,recording,id),db().prepare("INSERT INTO cm_events(project_id,actor_id,kind,target_id,build_id,created_at) SELECT ?,?,'build.shared',?,?,? WHERE EXISTS(SELECT 1 FROM cm_builds WHERE id=?)").bind(projectId,user.accountId,id,id,at,id),
+ ...(await db().prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cr_notifications'").first()?[db().prepare(`INSERT INTO cr_notifications(id,recipient_id,listing_id,kind,title,event_key,created_at)
+ SELECT lower(hex(randomblob(16))),a.id,s.id,'project','A project you help has an update',?,? FROM cm_showcase s JOIN studio_projects p ON p.id=s.project_id CROSS JOIN member_accounts a
+ WHERE s.project_id=? AND s.visible=1 AND s.hidden=0 AND a.id!=? AND a.disabled_at IS NULL
+ AND EXISTS(SELECT 1 FROM cm_builds b WHERE b.id=?)
+ AND (EXISTS(SELECT 1 FROM studio_project_members m WHERE m.project_id=s.project_id AND m.account_id=a.id) OR EXISTS(SELECT 1 FROM cr_contributions c JOIN cr_requests r ON r.id=c.request_id WHERE r.listing_id=s.id AND c.author_id=a.id))
+ AND NOT EXISTS(SELECT 1 FROM cm_showcase_blocks x WHERE (x.account_id=a.id AND x.blocked_id=p.created_by) OR (x.blocked_id=a.id AND x.account_id=p.created_by))
+ ON CONFLICT(recipient_id,event_key) DO NOTHING`).bind('project:'+id,at,projectId,user.accountId,id)]:[])]);
  const saved=await db().prepare('SELECT id,project_id,version_label FROM cm_builds WHERE created_by=? AND client_id=?').bind(user.accountId,key).first<any>();if(saved.project_id!==projectId||saved.version_label!==label)throw new RequestError('送信IDを確認してください。',409);return {ok:true,id:saved.id};
  }
  if(action==='feedback.task'){
+ if(p.created_by!==user.accountId)throw new RequestError("フィードバックを確認できるのはプロジェクトの管理者だけです。",403);
  const f=await feedback(user,shortText(b.feedbackId,100));if(f.project_id!==projectId)throw new RequestError('感想が見つかりません。',404);
  const taskId='cm-feedback-'+f.id,at=now();await db().batch([
  db().prepare("INSERT INTO studio_tasks(id,project_id,title,description,status,priority,assignee_ids,mutation_id,client_id,created_by,updated_by,created_at,updated_at)VALUES(?,?,?,?,'todo','medium',?,?,?,?,?,?,?) ON CONFLICT DO NOTHING").bind(taskId,projectId,'改善: '+f.body.slice(0,100),f.body,JSON.stringify([user.accountId]),crypto.randomUUID(),taskId,user.accountId,user.accountId,at,at),
@@ -140,6 +148,7 @@ export async function cmAction(user:StudioActor,b:Record<string,any>,origin:stri
  db().prepare("INSERT INTO cm_events(project_id,actor_id,kind,target_id,build_id,created_at) SELECT ?,?,'feedback.task',?,?,? WHERE changes()>0").bind(projectId,user.accountId,f.id,f.build_id,at)]);return {ok:true,taskId};
  }
  if(action==='retest.request'){
+ if(p.created_by!==user.accountId)throw new RequestError("改善を記録できるのはプロジェクトの管理者だけです。",403);
  const f=await feedback(user,shortText(b.feedbackId,100));if(f.project_id!==projectId)throw new RequestError('感想が見つかりません。',404);
  const improved=await build(projectId,shortText(b.buildId,100)),original=await build(projectId,f.build_id);
  if(improved.seq<=original.seq)throw new RequestError('新しい改善バージョンを選んでください。');

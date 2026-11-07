@@ -1,3 +1,4 @@
+import {RequestError} from './request-security';
 import {env} from 'cloudflare:workers';
 import {cookies} from 'next/headers';
 import {digest} from './workspace-security';
@@ -24,5 +25,5 @@ export function sameOrigin(request:Request){return request.headers.get('origin')
 export async function rateLimit(key:string,limit:number,windowMs=600000) {
  const id='workspace:'+await digest(key),window=Math.floor(Date.now()/windowMs);
  const row=await env.DB!.prepare('INSERT INTO admin_login_attempts (id,window,attempts) VALUES (?,?,1) ON CONFLICT(id) DO UPDATE SET attempts=CASE WHEN window=excluded.window THEN attempts+1 ELSE 1 END,window=excluded.window RETURNING attempts').bind(id,window).first<{attempts:number}>();
- if(!row||row.attempts>limit)throw Error('Too many attempts. Please try again in 10 minutes.');
+ if(!row||row.attempts>limit)throw new RequestError('Too many requests. Please try again shortly.',429);
 }

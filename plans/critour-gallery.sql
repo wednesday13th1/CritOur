@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS cr_showcase_gallery (
+ listing_id TEXT PRIMARY KEY REFERENCES cm_showcase(id),
+ tags TEXT NOT NULL DEFAULT '[]',
+ focus_x INTEGER NOT NULL DEFAULT 50 CHECK(focus_x BETWEEN 0 AND 100),
+ focus_y INTEGER NOT NULL DEFAULT 50 CHECK(focus_y BETWEEN 0 AND 100)
+);

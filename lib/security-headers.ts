@@ -5,3 +5,5 @@ export const securityHeaders={
  'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
  'Strict-Transport-Security':'max-age=31536000',
 };
+
+export const previewFrameSources = 'https://*.vercel.app https://*.netlify.app https://*.pages.dev https://*.github.io https://*.web.app https://*.firebaseapp.com https://*.chatgpt.site https://*.lolipop-now.app';

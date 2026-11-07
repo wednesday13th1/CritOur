@@ -1,12 +1,12 @@
 import {RequestError} from './request-security';
 export const feedbackKinds = ['love','idea','confused'] as const;
-export const feedbackLabels = {love:'I love…',idea:'What if…?',confused:"I'm confused…"};
+export const feedbackLabels = {love:"よかったところ",idea:"アイデア",confused:"改善してほしいところ"};
 export function previewUrl(value:unknown, appOrigin?:string):string|null {
  if(value===null||value===undefined||value==='')return null;
  if(typeof value!=='string'||value.length>2000)throw new RequestError('公開用のHTTPSプレビューURLを入力してください。');
  let u:URL;try{u=new URL(value)}catch{throw new RequestError('URLを確認してください。')}
  // Fixed hosting suffixes only. No server-side fetching or URL redirects.
- const allowed=['vercel.app','netlify.app','pages.dev','github.io','web.app','firebaseapp.com','chatgpt.site'];
+ const allowed=['vercel.app','netlify.app','pages.dev','github.io','web.app','firebaseapp.com','chatgpt.site','lolipop-now.app'];
  if(u.protocol!=='https:'||u.username||u.password||u.port||u.hash||u.search||u.origin===appOrigin||!allowed.some(h=>u.hostname.endsWith('.'+h))||u.hostname.endsWith('.localhost'))throw new RequestError('対応する公開プレビュー先のHTTPS URLを指定してください。認証情報・クエリ・内部アドレスは使えません。');
  return u.href;
 }

@@ -1,5 +1,5 @@
 import {readBody,RequestError} from '../lib/request-security';
-import {securityHeaders} from "../lib/security-headers";
+import {securityHeaders,previewFrameSources} from "../lib/security-headers";
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
@@ -40,8 +40,8 @@ export default {
     const secured=new Response(response.body,response);
     for(const [name,value] of Object.entries(securityHeaders)){if(name==='Content-Security-Policy'&&secured.headers.get(name)?.includes('sandbox'))continue;secured.headers.set(name,value);}
     const path=new URL(request.url).pathname;
-    if(env.CODEMATE_ENABLED==='true'&&['/codemate/playground','/codemate/discover'].includes(path)){const csp=secured.headers.get('Content-Security-Policy')||'';secured.headers.set('Content-Security-Policy',csp+"; frame-src https://*.vercel.app https://*.netlify.app https://*.pages.dev https://*.github.io https://*.web.app https://*.firebaseapp.com https://*.chatgpt.site");secured.headers.set('Referrer-Policy','no-referrer');}
-    if(path.startsWith('/codemate')||path.startsWith('/admin')||path.startsWith('/studio')||path.startsWith('/api/'))secured.headers.set('Cache-Control','no-store');
+    if(env.CODEMATE_ENABLED==='true'&&['/codemate/playground','/codemate/discover'].includes(path)){const csp=secured.headers.get('Content-Security-Policy')||'';secured.headers.set('Content-Security-Policy',csp+"; frame-src "+previewFrameSources);secured.headers.set('Referrer-Policy','no-referrer');}
+    if(path.startsWith('/p/')||path.startsWith('/impact/')||path.startsWith('/codemate')||path.startsWith('/admin')||path.startsWith('/studio')||path.startsWith('/api/'))secured.headers.set('Cache-Control','no-store');
     return secured;
   },
 };

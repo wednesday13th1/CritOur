@@ -8,6 +8,10 @@ declare namespace Cloudflare {
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
     AUTH_BASE_URL?: string;
+    PUBLIC_BASE_URL?: string;
+    CRITOUR_OAUTH_ENABLED?: string;
+    GITHUB_CLIENT_ID?: string;
+    GITHUB_CLIENT_SECRET?: string;
     ADMIN_PASSCODE?: string;
     ADMIN_SESSION_SECRET?: string;
     BUCKET?: R2Bucket;

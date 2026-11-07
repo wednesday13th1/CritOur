@@ -2,7 +2,9 @@
 import base64, concurrent.futures, datetime, hashlib, json, pathlib, sqlite3, sys, time, urllib.error, urllib.request, uuid
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 BASE='http://127.0.0.1:5181'
-STATE=ROOT/'.sites-runtime/codemate-local-state/v3/d1/miniflare-D1DatabaseObject'
+import os
+state_dir='deploy-now-smoke-state' if os.environ.get('CRITOUR_TEST_STANDALONE')=='1' else 'codemate-local-state'
+STATE=ROOT/'.sites-runtime'/state_dir/'v3/d1/miniflare-D1DatabaseObject'
 try:urllib.request.urlopen(BASE+'/api/codemate',timeout=10)
 except urllib.error.HTTPError as e:assert e.code==401,'Expected the isolated CodeMate preview.'
 if not any(p.name!='metadata.sqlite' for p in STATE.glob('*.sqlite')):
@@ -21,6 +23,8 @@ if 'commit_url' not in [r[1] for r in conn.execute('PRAGMA table_info(cm_builds)
 if not exists('cm_showcase'):conn.executescript((ROOT/'plans/show-and-grow.sql').read_text())
 conn.executescript((ROOT/'plans/our-canvas.sql').read_text())
 conn.executescript((ROOT/'plans/virtual-playground.sql').read_text())
+conn.executescript((ROOT/'plans/critour-showcase.sql').read_text())
+conn.executescript((ROOT/'plans/critour-gallery.sql').read_text())
 conn.execute('PRAGMA foreign_keys=ON')
 CODE='codemate-disposable-local-qa-login-20261105'
 manager='cm_local_manager'
@@ -97,6 +101,9 @@ mini=good(a.post('task.create',project,title='ログインボタンを動かす'
 check(a.read(project)[1]['nextTask']['id']==mini,'next task comes from assigned unfinished work')
 check(b.read(project)[1]['tasks']==[],'tester receives no internal task payload')
 check(a.image(project,'x.svg',b'<svg onload="alert(1)"></svg>')[0]==400,'active SVG not accepted as screenshot')
+oversize=bytearray(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+Xk0cAAAAASUVORK5CYII='))
+oversize[16:20]=(9000).to_bytes(4,'big')
+check(a.image(project,payload=oversize)[0]==400,'image dimensions are capped before storage')
 asset=good(a.image(project),201)['id']
 check(b.request('/api/codemate/assets/'+asset)[0]==404,'unpublished screenshot private to uploader')
 url='https://mdn.github.io/dom-examples/'
@@ -160,8 +167,26 @@ check(outsider.request(detail)[0]==404 and outsider.request(picture)[0]==404,'dr
 good(showpost(a,'visibility',id=sid,visible=True))
 check(Client().request(detail)[0]==401,'showcase requires authentication')
 card=good(outsider.request(detail))['listing']
-check(set(card)=={'id','title','description','category','stage','seeking','kind','version','preview','image','updatedAt'},'showcase returns only curated metadata')
+check(set(card)=={'id','title','description','category','stage','seeking','kind','version','preview','media','image','updatedAt','tags','focusX','focusY'},'showcase returns only curated metadata')
 check(outsider.read(project)[0]==404 and outsider.request(picture)[0]==200,'displaying an image does not grant project access')
+# Standalone showcases do not require a simulator, build, or GitHub account.
+standalone=dict(projectId=project,title='Standalone QA '+run,description='A standalone gallery',category='android',stage='ready',
+                coverId=asset,screenshots=[v2asset,v2asset],demo='https://play.google.com/store/apps/details?id=org.example.app',
+                video='https://www.youtube.com/watch?v=example',github='https://github.com/example/example')
+check(showpost(a,'draft',**(standalone|{'demo':'https://127.0.0.1/'}))[0]==400,'showcase rejects private-address demo URL')
+check(showpost(a,'draft',**(standalone|{'github':'https://github.com/example'}))[0]==400,'showcase requires repository-shaped GitHub URLs')
+good(showpost(a,'draft',**standalone))
+gallery=next(v for v in good(a.request(show+'?project='+project))['listings'] if v['title']==standalone['title'])
+gallery_id=gallery['id']; gallery_image=show+'/'+gallery_id+'/image'
+check(gallery['media']['screenshots']==[v2asset] and gallery['media']['cover']==asset,'showcase saves a cover and deduplicates screenshots')
+check(outsider.request(gallery_image+'?asset='+v2asset)[0]==404,'draft gallery screenshot is private')
+check(showpost(b,'draft',id=gallery_id,**standalone)[0]==403,'only the owner can edit the showcase')
+good(showpost(a,'visibility',id=gallery_id,visible=True))
+check(outsider.request(gallery_image+'?asset='+v2asset)[0]==200 and outsider.request(gallery_image+'?asset='+str(uuid.uuid4()))[0]==404,'gallery serves only its listed assets')
+good(showpost(a,'draft',id=gallery_id,**(standalone|{'title':'Edited gallery '+run,'screenshots':[],'coverId':None})))
+gallery=good(outsider.request(show+'?id='+gallery_id))['listing']
+check(gallery['title'].startswith('Edited gallery') and gallery['media']['cover'] is None and outsider.request(gallery_image+'?asset='+v2asset)[0]==404,'edit preserves listing identity and removes gallery access')
+
 check(any(x['id']==sid for x in good(outsider.request(show+'?mode=seeking&q='+run))['listings']),'seeking filter finds new showcase')
 check(showpost(outsider,'comment',id=sid,kind='idea',body='https://bad.example')[0]==400,'external links rejected in feedback')
 good(showpost(outsider,'comment',id=sid,kind='idea',body='ボタンを見つけやすくできそう。'))
